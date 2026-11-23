@@ -1,0 +1,77 @@
+name: Build Chaima Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '*.zip'
+      - '.github/workflows/build-android.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Extract uploaded project ZIP if needed
+        shell: bash
+        run: |
+          if [ ! -f package.json ]; then
+            ZIP="$(find . -maxdepth 1 -type f -name '*.zip' ! -name '*debug-apk*' | head -n 1)"
+            if [ -z "$ZIP" ]; then
+              echo 'ERROR: No project ZIP found in repository root.'
+              exit 1
+            fi
+            mkdir -p _project
+            unzip -oq "$ZIP" -d _project
+            PACKAGE="$(find _project -type f -name package.json | head -n 1)"
+            if [ -z "$PACKAGE" ]; then
+              echo 'ERROR: package.json was not found inside the ZIP.'
+              exit 1
+            fi
+            ROOT="$(dirname "$PACKAGE")"
+            cp -a "$ROOT"/. .
+          fi
+          test -f package.json
+          test -f capacitor.config.json
+
+      - name: Install app dependencies and Capacitor
+        run: |
+          npm install
+          npm install @capacitor/core @capacitor/android
+          npm install --save-dev @capacitor/cli
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Add Android platform
+        run: npx cap add android
+
+      - name: Sync Android project
+        run: npx cap sync android
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build debug APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaima-order-manager-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
