@@ -18,29 +18,32 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Verify and extract V0.5 project
+        shell: bash
         run: |
+          set -euo pipefail
           ZIP="chaima-order-manager-v0.5-logo.zip"
-          test -f "$ZIP" || { echo "Missing $ZIP in repository root"; exit 1; }
+          test -f "$ZIP" || { echo "ERROR: Missing $ZIP in repository root"; exit 1; }
           mkdir -p extracted
           unzip -q "$ZIP" -d extracted
-          ROOT="$(find extracted -type f -name package.json -print -quit | xargs dirname)"
-          test -n "$ROOT" || { echo "package.json not found in V0.5 ZIP"; exit 1; }
+          ROOT="$(find extracted -type f -name package.json -print -quit | xargs -r dirname)"
+          test -n "$ROOT" || { echo "ERROR: package.json not found in V0.5 ZIP"; exit 1; }
           cp -a "$ROOT"/. .
           echo "Project source: $ROOT"
-          test -f public/order-manager-logo.png || { echo "New logo asset is missing"; exit 1; }
-          grep -q 'v0.5.0' src/main.jsx || { echo "V0.5 source marker not found"; exit 1; }
+          test -f package.json || { echo "ERROR: package.json missing after extraction"; exit 1; }
+          test -f public/order-manager-logo.png || { echo "ERROR: New logo asset is missing"; exit 1; }
+          node -e "const p=require('./package.json'); if(p.version!=='0.5.0') { console.error('Wrong project version:',p.version); process.exit(1) } console.log('Verified project version:',p.version)"
 
-      - name: Set up Node
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          # Intentionally no npm cache: the project ZIP has no lockfile yet.
 
       - name: Install dependencies
         run: |
           npm install
           npm install @capacitor/core @capacitor/android
-          npm install -D @capacitor/cli
+          npm install --save-dev @capacitor/cli
 
       - name: Build web app
         run: npm run build
