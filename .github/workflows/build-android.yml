@@ -1,10 +1,10 @@
-name: Build Chaima Android APK
+name: Build Chaima Android APK (V0.5)
 
 on:
   workflow_dispatch:
   push:
     paths:
-      - '*.zip'
+      - 'chaima-order-manager-v0.5-logo.zip'
       - '.github/workflows/build-android.yml'
 
 permissions:
@@ -17,38 +17,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Verify and extract V0.5 project
+        run: |
+          ZIP="chaima-order-manager-v0.5-logo.zip"
+          test -f "$ZIP" || { echo "Missing $ZIP in repository root"; exit 1; }
+          mkdir -p extracted
+          unzip -q "$ZIP" -d extracted
+          ROOT="$(find extracted -type f -name package.json -print -quit | xargs dirname)"
+          test -n "$ROOT" || { echo "package.json not found in V0.5 ZIP"; exit 1; }
+          cp -a "$ROOT"/. .
+          echo "Project source: $ROOT"
+          test -f public/order-manager-logo.png || { echo "New logo asset is missing"; exit 1; }
+          grep -q 'v0.5.0' src/main.jsx || { echo "V0.5 source marker not found"; exit 1; }
+
+      - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      - name: Extract uploaded project ZIP if needed
-        shell: bash
-        run: |
-          if [ ! -f package.json ]; then
-            ZIP="$(find . -maxdepth 1 -type f -name '*.zip' ! -name '*debug-apk*' | head -n 1)"
-            if [ -z "$ZIP" ]; then
-              echo 'ERROR: No project ZIP found in repository root.'
-              exit 1
-            fi
-            mkdir -p _project
-            unzip -oq "$ZIP" -d _project
-            PACKAGE="$(find _project -type f -name package.json | head -n 1)"
-            if [ -z "$PACKAGE" ]; then
-              echo 'ERROR: package.json was not found inside the ZIP.'
-              exit 1
-            fi
-            ROOT="$(dirname "$PACKAGE")"
-            cp -a "$ROOT"/. .
-          fi
-          test -f package.json
-          test -f capacitor.config.json
-
-      - name: Install app dependencies and Capacitor
+      - name: Install dependencies
         run: |
           npm install
           npm install @capacitor/core @capacitor/android
-          npm install --save-dev @capacitor/cli
+          npm install -D @capacitor/cli
 
       - name: Build web app
         run: npm run build
@@ -56,7 +48,7 @@ jobs:
       - name: Add Android platform
         run: npx cap add android
 
-      - name: Sync Android project
+      - name: Sync Android
         run: npx cap sync android
 
       - name: Set up Java
@@ -69,9 +61,9 @@ jobs:
         working-directory: android
         run: chmod +x gradlew && ./gradlew assembleDebug
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: chaima-order-manager-debug-apk
+          name: chaima-order-manager-v05-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
